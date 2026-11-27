@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>聚餐分攤計算機 - 支援壽星免單與個人單點</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Noto Sans TC & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Inter"', '"Noto Sans TC"', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#fff8f1',
+              100: '#feecdc',
+              200: '#fcd9bd',
+              300: '#fdba8c',
+              400: '#ff8a4c',
+              500: '#ff5a1f',
+              600: '#d03801',
+              700: '#b43403',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #faf8f5;
+      color: #1f2937;
+      -webkit-tap-highlight-color: transparent;
+    }
+    /* Custom subtle scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #d1d5db;
+      border-radius: 9999px;
+    }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body class="min-h-screen pb-24 md:pb-12">
+
+  <!-- Toast Notification (Replaces alert) -->
+  <div id="toast" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none opacity-0 transition-all duration-300 transform -translate-y-2">
+    <div class="bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 text-sm font-medium">
+      <span id="toast-icon">✅</span>
+      <span id="toast-message">已複製到剪貼簿</span>
+    </div>
+  </div>
+
+  <!-- Custom Confirmation Modal (Replaces confirm) -->
+  <div id="confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 backdrop-blur-xs p-4">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-gray-100 transform transition-all">
+      <h3 class="text-lg font-bold text-gray-900 mb-2" id="modal-title">確認清空資料？</h3>
+      <p class="text-sm text-gray-600 mb-6" id="modal-desc">這將會清除所有目前輸入的成員、共同餐點與單點飲料紀錄。</p>
+      <div class="flex gap-3 justify-end">
+        <button id="modal-cancel" class="px-4 py-2.5 rounded-xl text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 transition">
+          取消
+        </button>
+        <button id="modal-confirm" class="px-4 py-2.5 rounded-xl text-sm font-medium text-white bg-red-500 hover:bg-red-600 transition shadow-sm">
+          確定清空
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Header -->
+  <header class="bg-white/90 backdrop-blur-md sticky top-0 z-30 border-b border-orange-100">
+    <div class="max-w-5xl mx-auto px-4 py-3.5 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center text-white text-xl shadow-sm">
+          🍲
+        </div>
+        <div>
+          <h1 class="text-lg sm:text-xl font-bold text-gray-900 tracking-tight leading-tight">聚餐分攤計算機</h1>
+          <p class="text-xs text-gray-500">壽星免單 · 個人單點 · 服務費自動算</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button onclick="loadSampleData()" class="px-3 py-2 rounded-xl text-xs sm:text-sm font-medium text-orange-700 bg-orange-50 hover:bg-orange-100 transition">
+          載入範例
+        </button>
+        <button onclick="openResetModal()" class="px-3 py-2 rounded-xl text-xs sm:text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 transition">
+          清空
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Grid -->
+  <main class="max-w-5xl mx-auto px-4 pt-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- Left Column: Inputs (7 cols on lg) -->
+    <div class="lg:col-span-7 space-y-6">
+
+      <!-- Section 1: Participants -->
+      <section class="bg-white rounded-3xl p-5 sm:p-6 shadow-xs border border-orange-100/80">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">👥</span>
+            <h2 class="text-base sm:text-lg font-bold text-gray-900">1. 聚餐成員與壽星設定</h2>
+          </div>
+          <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-orange-50 text-orange-700" id="participant-count-badge">
+            共 0 人
+          </span>
+        </div>
+
+        <!-- Add Participant Input -->
+        <form onsubmit="handleAddParticipant(event)" class="flex gap-2 mb-4">
+          <input
+            type="text"
+            id="new-participant-name"
+            placeholder="輸入成員名字（例如：小美、阿傑）"
+            class="flex-1 px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:bg-white transition"
+          />
+          <button
+            type="submit"
+            class="px-5 py-3 rounded-2xl bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold transition shrink-0 shadow-xs active:scale-95"
+          >
+            + 新增
+          </button>
+        </form>
+
+        <p class="text-xs text-gray-500 mb-3">💡 點擊成員卡片上的「🎂 設為壽星」即可切換免單狀態（免單者的餐費將由其他付費成員平均分攤）。</p>
+
+        <!-- Participants List -->
+        <div id="participants-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <!-- Rendered dynamically -->
+        </div>
+      </section>
+
+      <!-- Section 2: Shared Food & Service Charge -->
+      <section class="bg-white rounded-3xl p-5 sm:p-6 shadow-xs border border-orange-100/80">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">🍽️</span>
+            <h2 class="text-base sm:text-lg font-bold text-gray-900">2. 共同餐費（大家一起分）</h2>
+          </div>
+          <div class="text-right">
+            <span class="text-xs text-gray-500 block">共同小計</span>
+            <span class="text-base font-bold text-orange-600" id="shared-subtotal-display">$0</span>
+          </div>
+        </div>
+
+        <!-- Shared Dishes List -->
+        <div id="shared-items-list" class="space-y-2.5 mb-3">
+          <!-- Rendered dynamically -->
+        </div>
+
+        <!-- Add Shared Dish Form -->
+        <form onsubmit="handleAddSharedItem(event)" class="grid grid-cols-12 gap-2 pt-1">
+          <input
+            type="text"
+            id="shared-item-name"
+            placeholder="品項（如：四人合菜、鍋底）"
+            class="col-span-6 sm:col-span-7 px-3.5 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:bg-white"
+          />
+          <input
+            type="number"
+            id="shared-item-price"
+            placeholder="金額"
+            min="0"
+            step="1"
+            required
+            class="col-span-4 sm:col-span-3 px-3.5 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:bg-white"
+          />
+          <button
+            type="submit"
+            class="col-span-2 px-3 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold transition flex items-center justify-center active:scale-95"
+          >
+            加入
+          </button>
+        </form>
+
+        <!-- Service Charge & Rounding Options -->
+        <div class="mt-5 pt-4 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-2">服務費比例 (%)</label>
+            <div class="flex items-center gap-1.5">
+              <button type="button" onclick="setServiceRate(0)" id="srv-btn-0" class="srv-btn flex-1 py-2 rounded-xl text-xs font-semibold border transition">免服務費 (0%)</button>
+              <button type="button" onclick="setServiceRate(10)" id="srv-btn-10" class="srv-btn flex-1 py-2 rounded-xl text-xs font-semibold border transition">10%</button>
+              <div class="relative w-20">
+                <input
+                  type="number"
+                  id="service-rate-input"
+                  value="10"
+                  min="0"
+                  max="100"
+                  oninput="handleServiceRateInput(this.value)"
+                  class="w-full pl-2.5 pr-6 py-2 rounded-xl bg-gray-50 border border-gray-200 text-xs font-semibold text-center focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
+                <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">%</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-2">金額進位方式</label>
+            <select
+              id="rounding-mode"
+              onchange="updateStateAndRender()"
+              class="w-full px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+            >
+              <option value="round" selected>四捨五入至整數（推薦）</option>
+              <option value="ceil">無條件進位至整數</option>
+              <option value="exact">保留小數點後一位</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 3: Extra Individual Drinks / Items -->
+      <section class="bg-white rounded-3xl p-5 sm:p-6 shadow-xs border border-orange-100/80">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">🧋</span>
+            <h2 class="text-base sm:text-lg font-bold text-gray-900">3. 個人額外單點 / 飲料</h2>
+          </div>
+          <div class="text-right">
+            <span class="text-xs text-gray-500 block">單點小計</span>
+            <span class="text-base font-bold text-amber-600" id="extra-subtotal-display">$0</span>
+          </div>
+        </div>
+
+        <!-- Add Extra Item Form -->
+        <form onsubmit="handleAddExtraItem(event)" class="bg-amber-50/60 p-3.5 rounded-2xl border border-amber-100 mb-4 space-y-3">
+          <div class="grid grid-cols-12 gap-2">
+            <div class="col-span-12 sm:col-span-5">
+              <label class="block text-[11px] font-semibold text-gray-600 mb-1">誰點的？</label>
+              <select
+                id="extra-item-person"
+                required
+                class="w-full px-3 py-2.5 rounded-xl bg-white border border-amber-200 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-400"
+              >
+                <!-- Options populated dynamically -->
+              </select>
+            </div>
+            <div class="col-span-7 sm:col-span-4">
+              <label class="block text-[11px] font-semibold text-gray-600 mb-1">單點品項</label>
+              <input
+                type="text"
+                id="extra-item-name"
+                placeholder="如：珍珠奶茶、生啤"
+                required
+                class="w-full px-3 py-2.5 rounded-xl bg-white border border-amber-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
+            </div>
+            <div class="col-span-5 sm:col-span-3">
+              <label class="block text-[11px] font-semibold text-gray-600 mb-1">單價 ($)</label>
+              <input
+                type="number"
+                id="extra-item-price"
+                placeholder="0"
+                min="0"
+                step="1"
+                required
+                class="w-full px-3 py-2.5 rounded-xl bg-white border border-amber-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            class="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold transition shadow-xs active:scale-[0.99]"
+          >
+            + 新增個人單點項目
+          </button>
+        </form>
+
+        <!-- Extra Rules Toggles -->
+        <div class="space-y-2 mb-4 bg-gray-50 p-3 rounded-2xl text-xs">
+          <label class="flex items-center justify-between cursor-pointer select-none">
+            <span class="text-gray-700 font-medium">個人單點飲料也需計算服務費</span>
+            <input type="checkbox" id="extra-has-service" checked onchange="updateStateAndRender()" class="w-4 h-4 accent-orange-500 rounded cursor-pointer">
+          </label>
+          <label class="flex items-center justify-between cursor-pointer select-none pt-1 border-t border-gray-200/70">
+            <span class="text-gray-700 font-medium">🎂 壽星點的飲料也由大家請客（免付費）</span>
+            <input type="checkbox" id="birthday-extra-free" checked onchange="updateStateAndRender()" class="w-4 h-4 accent-orange-500 rounded cursor-pointer">
+          </label>
+        </div>
+
+        <!-- Extra Items List -->
+        <div id="extra-items-list" class="space-y-2">
+          <!-- Rendered dynamically -->
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Right Column: Real-time Summary & Breakdown (5 cols on lg) -->
+    <div class="lg:col-span-5 space-y-5">
+      <div class="lg:sticky lg:top-20 space-y-5">
+
+        <!-- Total Overview Card -->
+        <section class="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white rounded-3xl p-6 shadow-lg">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs font-medium text-gray-300 uppercase tracking-wider">整桌結帳總金額 (含服務費)</span>
+            <span class="text-xs px-2.5 py-0.5 rounded-full bg-white/10 text-orange-300 font-medium" id="summary-service-badge">
+              服務費 10%
+            </span>
+          </div>
+          <div class="text-3xl sm:text-4xl font-bold tracking-tight text-white mb-5" id="grand-total-display">
+            $0
+          </div>
+
+          <div class="grid grid-cols-3 gap-2 pt-4 border-t border-white/10 text-center">
+            <div class="bg-white/5 rounded-2xl p-2.5">
+              <span class="text-[11px] text-gray-400 block">付費人數</span>
+              <span class="text-base font-bold text-white" id="paying-count-display">0 人</span>
+            </div>
+            <div class="bg-white/5 rounded-2xl p-2.5">
+              <span class="text-[11px] text-gray-400 block">壽星/免單</span>
+              <span class="text-base font-bold text-amber-400" id="free-count-display">0 人</span>
+            </div>
+            <div class="bg-white/5 rounded-2xl p-2.5">
+              <span class="text-[11px] text-gray-400 block">共同均攤/人</span>
+              <span class="text-base font-bold text-emerald-400" id="avg-shared-display">$0</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Per-Person Breakdown Card -->
+        <section class="bg-white rounded-3xl p-5 sm:p-6 shadow-xs border border-orange-100/80">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2">
+              <span class="text-xl">🧾</span>
+              <h2 class="text-base sm:text-lg font-bold text-gray-900">每人應付明細</h2>
+            </div>
+            <button
+              onclick="copySummaryToClipboard()"
+              class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition flex items-center gap-1.5 shadow-xs active:scale-95"
+            >
+              <span>📋</span>
+              <span>一鍵複製明細</span>
+            </button>
+          </div>
+
+          <!-- Person Breakdown List -->
+          <div id="breakdown-list" class="space-y-3">
+            <!-- Rendered dynamically -->
+          </div>
+
+          <!-- Rounding Difference Note -->
+          <div id="rounding-note" class="hidden mt-4 pt-3 border-t border-gray-100 text-[11px] text-gray-400 flex justify-between">
+            <span>四捨五入後實收總額：</span>
+            <span id="rounded-collected-total" class="font-semibold text-gray-600">$0</span>
+          </div>
+        </section>
+
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Mobile Sticky Bottom Action Bar -->
+  <div class="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-gray-200 p-3 flex items-center justify-between lg:hidden z-40">
+    <div>
+      <span class="text-[11px] text-gray-500 block">整桌總計 (<span id="mobile-paying-count">0</span>人分攤)</span>
+      <span class="text-lg font-bold text-gray-900" id="mobile-grand-total">$0</span>
+    </div>
+    <button
+      onclick="copySummaryToClipboard()"
+      class="px-5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm flex items-center gap-1.5 active:scale-95"
+    >
+      <span>📋</span>
+      <span>複製明細傳 LINE</span>
+    </button>
+  </div>
+
+  <script>
+    // ==========================================
+    // Application State
+    // ==========================================
+    let state = {
+      participants: [],
+      sharedItems: [],
+      extraItems: [],
+      serviceRate: 10,
+      extraHasService: true,
+      birthdayExtraFree: true,
+      roundingMode: 'round' // 'round' | 'ceil' | 'exact'
+    };
+
+    // Utility to generate unique IDs
+    const uid = () => '_' + Math.random().toString(36).substring(2, 9);
+
+    // ==========================================
+    // Initialization & Sample Data
+    // ==========================================
+    function loadSampleData() {
+      state = {
+        participants: [
+          { id: 'p1', name: '大偉 (壽星)', isBirthday: true },
+          { id: 'p2', name: '小明', isBirthday: false },
+          { id: 'p3', name: '小華', isBirthday: false },
+          { id: 'p4', name: '雅婷', isBirthday: false }
+        ],
+        sharedItems: [
+          { id: 's1', name: '四人歡樂分享餐', price: 2400 },
+          { id: 's2', name: '加點松阪豬拼盤', price: 420 }
+        ],
+        extraItems: [
+          { id: 'e1', personId: 'p2', name: '特調珍珠奶茶', price: 120 },
+          { id: 'e2', personId: 'p3', name: '生啤酒 500ml', price: 150 },
+          { id: 'e3', personId: 'p1', name: '壽星特調水果茶', price: 130 }
+        ],
+        serviceRate: 10,
+        extraHasService: true,
+        birthdayExtraFree: true,
+        roundingMode: 'round'
+      };
+
+      // Sync UI controls
+      document.getElementById('service-rate-input').value = state.serviceRate;
+      document.getElementById('extra-has-service').checked = state.extraHasService;
+      document.getElementById('birthday-extra-free').checked = state.birthdayExtraFree;
+      document.getElementById('rounding-mode').value = state.roundingMode;
+
+      updateStateAndRender();
+      showToast('已載入聚餐範例資料', '🍽️');
+    }
+
+    function clearAllData() {
+      state.participants = [
+        { id: uid(), name: '成員 1', isBirthday: false },
+        { id: uid(), name: '成員 2', isBirthday: false }
+      ];
+      state.sharedItems = [];
+      state.extraItems = [];
+      updateStateAndRender();
+      closeResetModal();
+      showToast('已清空所有資料', '🧹');
+    }
+
+    // ==========================================
+    // Event Handlers: Participants
+    // ==========================================
+    function handleAddParticipant(e) {
+      e.preventDefault();
+      const input = document.getElementById('new-participant-name');
+      const name = input.value.trim();
+      if (!name) {
+        showToast('請輸入成員名稱', '⚠️');
+        return;
+      }
+      state.participants.push({
+        id: uid(),
+        name: name,
+        isBirthday: false
+      });
+      input.value = '';
+      updateStateAndRender();
+    }
+
+    function toggleBirthday(id) {
+      const person = state.participants.find(p => p.id === id);
+      if (person) {
+        person.isBirthday = !person.isBirthday;
+        updateStateAndRender();
+      }
+    }
+
+    function removeParticipant(id) {
+      state.participants = state.participants.filter(p => p.id !== id);
+      // Also remove extra items belonging to this participant
+      state.extraItems = state.extraItems.filter(item => item.personId !== id);
+      updateStateAndRender();
+    }
+
+    // ==========================================
+    // Event Handlers: Shared Items & Settings
+    // ==========================================
+    function handleAddSharedItem(e) {
+      e.preventDefault();
+      const nameInput = document.getElementById('shared-item-name');
+      const priceInput = document.getElementById('shared-item-price');
+      const price = parseFloat(priceInput.value);
+
+      if (isNaN(price) || price < 0) {
+        showToast('請輸入有效的金額', '⚠️');
+        return;
+      }
+
+      const name = nameInput.value.trim() || `共同餐點 #${state.sharedItems.length + 1}`;
+      state.sharedItems.push({
+        id: uid(),
+        name,
+        price
+      });
+
+      nameInput.value = '';
+      priceInput.value = '';
+      updateStateAndRender();
+    }
+
+    function updateSharedItemPrice(id, newPrice) {
+      const item = state.sharedItems.find(i => i.id === id);
+      if (item) {
+        const val = parseFloat(newPrice);
+        item.price = isNaN(val) || val < 0 ? 0 : val;
+        renderCalculationsOnly();
+      }
+    }
+
+    function removeSharedItem(id) {
+      state.sharedItems = state.sharedItems.filter(i => i.id !== id);
+      updateStateAndRender();
+    }
+
+    function setServiceRate(rate) {
+      state.serviceRate = rate;
+      document.getElementById('service-rate-input').value = rate;
+      updateStateAndRender();
+    }
+
+    function handleServiceRateInput(val) {
+      const num = parseFloat(val);
+      state.serviceRate = isNaN(num) || num < 0 ? 0 : num;
+      updateStateAndRender();
+    }
+
+    // ==========================================
+    // Event Handlers: Extra Individual Items
+    // ==========================================
+    function handleAddExtraItem(e) {
+      e.preventDefault();
+      if (state.participants.length === 0) {
+        showToast('請先新增至少一位聚餐成員', '⚠️');
+        return;
+      }
+
+      const personId = document.getElementById('extra-item-person').value;
+      const nameInput = document.getElementById('extra-item-name');
+      const priceInput = document.getElementById('extra-item-price');
+
+      const name = nameInput.value.trim();
+      const price = parseFloat(priceInput.value);
+
+      if (!personId || !name || isNaN(price) || price < 0) {
+        showToast('請完整填寫單點品項與金額', '⚠️');
+        return;
+      }
+
+      state.extraItems.push({
+        id: uid(),
+        personId,
+        name,
+        price
+      });
+
+      nameInput.value = '';
+      priceInput.value = '';
+      updateStateAndRender();
+    }
+
+    function removeExtraItem(id) {
+      state.extraItems = state.extraItems.filter(i => i.id !== id);
+      updateStateAndRender();
+    }
+
+    // ==========================================
+    // Core Calculation Logic
+    // ==========================================
+    function formatMoney(amount, mode = state.roundingMode) {
+      if (mode === 'exact') {
+        return Number.isInteger(amount) ? `$${amount.toLocaleString()}` : `$${amount.toFixed(1)}`;
+      }
+      const rounded = mode === 'ceil' ? Math.ceil(amount) : Math.round(amount);
+      return `$${rounded.toLocaleString()}`;
+    }
+
+    function applyRounding(amount, mode = state.roundingMode) {
+      if (mode === 'exact') return Math.round(amount * 10) / 10;
+      if (mode === 'ceil') return Math.ceil(amount);
+      return Math.round(amount);
+    }
+
+    function calculateBill() {
+      state.extraHasService = document.getElementById('extra-has-service').checked;
+      state.birthdayExtraFree = document.getElementById('birthday-extra-free').checked;
+      state.roundingMode = document.getElementById('rounding-mode').value;
+
+      const srvMultiplier = state.serviceRate / 100;
+
+      // 1. Shared Food Subtotal & Service Charge
+      const sharedSubtotal = state.sharedItems.reduce((sum, item) => sum + item.price, 0);
+      const sharedService = sharedSubtotal * srvMultiplier;
+      const sharedTotalWithService = sharedSubtotal + sharedService;
+
+      // 2. Categorize Extra Items (Birthday Free vs Individual Paid)
+      let birthdayTreatedExtraSubtotal = 0; // Birthday person's drinks that everyone splits
+      const personExtraMap = {}; // personId -> array of items they pay themselves
+
+      state.participants.forEach(p => {
+        personExtraMap[p.id] = [];
+      });
+
+      state.extraItems.forEach(item => {
+        const owner = state.participants.find(p => p.id === item.personId);
+        if (!owner) return;
+
+        if (owner.isBirthday && state.birthdayExtraFree) {
+          // Everyone splits the birthday person's drink!
+          birthdayTreatedExtraSubtotal += item.price;
+        } else {
+          // Owner pays for their own drink
+          personExtraMap[owner.id].push(item);
+        }
+      });
+
+      const birthdayTreatedExtraService = state.extraHasService ? (birthdayTreatedExtraSubtotal * srvMultiplier) : 0;
+      const totalPoolToSplit = sharedTotalWithService + birthdayTreatedExtraSubtotal + birthdayTreatedExtraService;
+
+      // 3. Paying Headcount
+      const payingParticipants = state.participants.filter(p => !p.isBirthday);
+      const freeParticipants = state.participants.filter(p => p.isBirthday);
+      const payingCount = payingParticipants.length;
+
+      // Per paying person share of the common pool
+      const sharedPerPayingPerson = payingCount > 0 ? (totalPoolToSplit / payingCount) : 0;
+
+      // 4. Individual Breakdown
+      let rawGrandTotal = 0;
+      let roundedCollectedSum = 0;
+
+      const breakdowns = state.participants.map(person => {
+        const myExtraItems = personExtraMap[person.id] || [];
+        const myExtraSubtotal = myExtraItems.reduce((s, i) => s + i.price, 0);
+        const myExtraService = state.extraHasService ? (myExtraSubtotal * srvMultiplier) : 0;
+        const myExtraTotal = myExtraSubtotal + myExtraService;
+
+        // If birthday & birthdayExtraFree is true -> 0
+        // If birthday & birthdayExtraFree is false -> pays ONLY their own extra drinks
+        const mySharedPortion = person.isBirthday ? 0 : sharedPerPayingPerson;
+
+        // Separate base & service for clear display
+        const baseSharedPortion = person.isBirthday ? 0 : ((sharedSubtotal + birthdayTreatedExtraSubtotal) / (payingCount || 1));
+        const sharedServicePortion = person.isBirthday ? 0 : ((sharedService + birthdayTreatedExtraService) / (payingCount || 1));
+
+        const exactTotal = mySharedPortion + myExtraTotal;
+        const finalPay = applyRounding(exactTotal);
+
+        rawGrandTotal += exactTotal;
+        roundedCollectedSum += finalPay;
+
+        // Also grab any items that were treated for birthday person so we can display a badge
+        const treatedItems = person.isBirthday && state.birthdayExtraFree
+          ? state.extraItems.filter(i => i.personId === person.id)
+          : [];
+
+        return {
+          person,
+          baseSharedPortion,
+          sharedServicePortion,
+          mySharedPortion,
+          myExtraItems,
+          treatedItems,
+          myExtraSubtotal,
+          myExtraService,
+          exactTotal,
+          finalPay
+        };
+      });
+
+      const allExtraSubtotal = state.extraItems.reduce((sum, i) => sum + i.price, 0);
+
+      return {
+        sharedSubtotal,
+        allExtraSubtotal,
+        payingCount,
+        freeCount: freeParticipants.length,
+        sharedPerPayingPerson,
+        rawGrandTotal,
+        roundedCollectedSum,
+        breakdowns
+      };
+    }
+
+    // ==========================================
+    // UI Rendering
+    // ==========================================
+    function updateStateAndRender() {
+      renderParticipants();
+      renderSharedItems();
+      renderExtraPersonDropdown();
+      renderExtraItems();
+      renderServiceButtons();
+      renderCalculationsOnly();
+    }
+
+    function renderServiceButtons() {
+      const btn0 = document.getElementById('srv-btn-0');
+      const btn10 = document.getElementById('srv-btn-10');
+
+      const activeClass = 'bg-orange-500 text-white border-orange-500 shadow-xs';
+      const inactiveClass = 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50';
+
+      btn0.className = `srv-btn flex-1 py-2 rounded-xl text-xs font-semibold border transition ${state.serviceRate === 0 ? activeClass : inactiveClass}`;
+      btn10.className = `srv-btn flex-1 py-2 rounded-xl text-xs font-semibold border transition ${state.serviceRate === 10 ? activeClass : inactiveClass}`;
+    }
+
+    function renderParticipants() {
+      const container = document.getElementById('participants-list');
+      const badge = document.getElementById('participant-count-badge');
+      badge.textContent = `共 ${state.participants.length} 人`;
+
+      if (state.participants.length === 0) {
+        container.innerHTML = `<div class="col-span-full text-center py-6 text-sm text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-200">尚未新增成員，請在上方輸入名字</div>`;
+        return;
+      }
+
+      container.innerHTML = state.participants.map(p => `
+        <div class="flex items-center justify-between p-3 rounded-2xl border transition ${
+          p.isBirthday
+            ? 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-300 shadow-2xs'
+            : 'bg-gray-50/80 border-gray-200/80 hover:bg-white'
+        }">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
+              p.isBirthday ? 'bg-amber-400 text-white' : 'bg-gray-200 text-gray-700'
+            }">
+              ${p.isBirthday ? '🎂' : escapeHtml(p.name.charAt(0))}
+            </div>
+            <div class="truncate">
+              <div class="text-sm font-bold text-gray-900 truncate">${escapeHtml(p.name)}</div>
+              <div class="text-[11px] font-medium ${p.isBirthday ? 'text-amber-700' : 'text-gray-500'}">
+                ${p.isBirthday ? '壽星免單（免分攤）' : '一般付費成員'}
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-1.5 shrink-0 ml-2">
+            <button
+              type="button"
+              onclick="toggleBirthday('${p.id}')"
+              class="px-2.5 py-1.5 rounded-xl text-xs font-semibold transition ${
+                p.isBirthday
+                  ? 'bg-amber-500 text-white hover:bg-amber-600 shadow-2xs'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:border-amber-300 hover:text-amber-700'
+              }"
+              title="切換壽星免單狀態"
+            >
+              ${p.isBirthday ? '🎂 壽星中' : '設為壽星'}
+            </button>
+            <button
+              type="button"
+              onclick="removeParticipant('${p.id}')"
+              class="w-7 h-7 rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center transition"
+              title="移除成員"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderSharedItems() {
+      const container = document.getElementById('shared-items-list');
+      if (state.sharedItems.length === 0) {
+        container.innerHTML = `<div class="text-center py-4 text-xs text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-200">尚未加入共同餐點，請在下方輸入品項與金額</div>`;
+        return;
+      }
+
+      container.innerHTML = state.sharedItems.map(item => `
+        <div class="flex items-center justify-between gap-2 bg-gray-50 px-3.5 py-2.5 rounded-2xl border border-gray-200/70">
+          <span class="text-sm font-medium text-gray-800 truncate flex-1">${escapeHtml(item.name)}</span>
+          <div class="flex items-center gap-2 shrink-0">
+            <div class="relative w-28">
+              <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">$</span>
+              <input
+                type="number"
+                value="${item.price}"
+                min="0"
+                oninput="updateSharedItemPrice('${item.id}', this.value)"
+                class="w-full pl-6 pr-2 py-1.5 rounded-xl bg-white border border-gray-200 text-sm font-semibold text-right text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-400"
+              />
+            </div>
+            <button
+              type="button"
+              onclick="removeSharedItem('${item.id}')"
+              class="w-7 h-7 rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center transition"
+              title="刪除項目"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderExtraPersonDropdown() {
+      const select = document.getElementById('extra-item-person');
+      const previousVal = select.value;
+
+      if (state.participants.length === 0) {
+        select.innerHTML = `<option value="">請先新增成員</option>`;
+        return;
+      }
+
+      select.innerHTML = state.participants.map(p => `
+        <option value="${p.id}">${escapeHtml(p.name)} ${p.isBirthday ? '(🎂壽星)' : ''}</option>
+      `).join('');
+
+      if (state.participants.some(p => p.id === previousVal)) {
+        select.value = previousVal;
+      }
+    }
+
+    function renderExtraItems() {
+      const container = document.getElementById('extra-items-list');
+      if (state.extraItems.length === 0) {
+        container.innerHTML = `<div class="text-center py-4 text-xs text-gray-400">目前沒有個人額外單點項目</div>`;
+        return;
+      }
+
+      container.innerHTML = state.extraItems.map(item => {
+        const person = state.participants.find(p => p.id === item.personId);
+        const personName = person ? person.name : '未知成員';
+        const isFreeBday = person && person.isBirthday && state.birthdayExtraFree;
+
+        return `
+          <div class="flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-2xl border ${
+            isFreeBday ? 'bg-amber-50/70 border-amber-200' : 'bg-white border-gray-200/80'
+          }">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="px-2 py-0.5 rounded-lg text-xs font-bold shrink-0 ${
+                person?.isBirthday ? 'bg-amber-200/80 text-amber-900' : 'bg-gray-100 text-gray-700'
+              }">
+                ${escapeHtml(personName)}
+              </span>
+              <span class="text-sm text-gray-800 truncate">${escapeHtml(item.name)}</span>
+              ${isFreeBday ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500 text-white font-semibold shrink-0">大家請客</span>' : ''}
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <span class="text-sm font-bold text-gray-900">$${item.price.toLocaleString()}</span>
+              <button
+                type="button"
+                onclick="removeExtraItem('${item.id}')"
+                class="w-7 h-7 rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center transition"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderCalculationsOnly() {
+      const result = calculateBill();
+
+      // Subtotals
+      document.getElementById('shared-subtotal-display').textContent = `$${result.sharedSubtotal.toLocaleString()}`;
+      document.getElementById('extra-subtotal-display').textContent = `$${result.allExtraSubtotal.toLocaleString()}`;
+
+      // Summary Card
+      document.getElementById('summary-service-badge').textContent = state.serviceRate > 0 ? `服務費 ${state.serviceRate}%` : '免服務費';
+      document.getElementById('grand-total-display').textContent = formatMoney(result.rawGrandTotal, 'exact');
+      document.getElementById('paying-count-display').textContent = `${result.payingCount} 人`;
+      document.getElementById('free-count-display').textContent = `${result.freeCount} 人`;
+      document.getElementById('avg-shared-display').textContent = result.payingCount > 0 ? formatMoney(result.sharedPerPayingPerson) : '$0';
+
+      // Mobile Sticky Bar
+      document.getElementById('mobile-paying-count').textContent = result.payingCount;
+      document.getElementById('mobile-grand-total').textContent = formatMoney(result.rawGrandTotal, 'exact');
+
+      // Breakdown List
+      const breakdownContainer = document.getElementById('breakdown-list');
+      if (result.breakdowns.length === 0) {
+        breakdownContainer.innerHTML = `<div class="text-center py-6 text-sm text-gray-400">請新增成員以查看分攤結果</div>`;
+        return;
+      }
+
+      // Warning if everyone is marked as birthday (0 paying people)
+      let warningBanner = '';
+      if (result.payingCount === 0 && (result.sharedSubtotal > 0 || result.allExtraSubtotal > 0)) {
+        warningBanner = `
+          <div class="p-3 rounded-2xl bg-red-50 border border-red-200 text-xs text-red-700 font-medium mb-3">
+            ⚠️ 目前所有成員都設為「壽星免單」，沒有人可以分攤共同餐費喔！
+          </div>
+        `;
+      }
+
+      breakdownContainer.innerHTML = warningBanner + result.breakdowns.map(b => {
+        const { person, baseSharedPortion, sharedServicePortion, myExtraItems, treatedItems, myExtraSubtotal, myExtraService, finalPay } = b;
+
+        const extraDetailsHtml = myExtraItems.length > 0
+          ? `<div class="mt-1.5 pt-1.5 border-t border-dashed border-gray-200 space-y-0.5">
+              ${myExtraItems.map(item => `
+                <div class="flex justify-between text-xs text-amber-700">
+                  <span>+ 單點：${escapeHtml(item.name)}</span>
+                  <span>$${item.price.toLocaleString()}${state.extraHasService && state.serviceRate > 0 ? ` (+${state.serviceRate}%服務費)` : ''}</span>
+                </div>
+              `).join('')}
+            </div>`
+          : '';
+
+        const treatedDetailsHtml = treatedItems.length > 0
+          ? `<div class="mt-1.5 pt-1.5 border-t border-dashed border-amber-200 space-y-0.5">
+              ${treatedItems.map(item => `
+                <div class="flex justify-between text-xs text-amber-700">
+                  <span>🎁 壽星單點（大家請客）：${escapeHtml(item.name)}</span>
+                  <span class="line-through opacity-70">$${item.price.toLocaleString()}</span>
+                </div>
+              `).join('')}
+            </div>`
+          : '';
+
+        return `
+          <div class="p-4 rounded-2xl border transition ${
+            person.isBirthday
+              ? 'bg-amber-50/60 border-amber-200'
+              : 'bg-gray-50/70 border-gray-200/80'
+          }">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-gray-900 text-base">${escapeHtml(person.name)}</span>
+                ${person.isBirthday ? '<span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-400 text-white">🎂 壽星免單</span>' : ''}
+              </div>
+              <div class="text-right">
+                <span class="text-lg font-extrabold ${person.isBirthday && finalPay === 0 ? 'text-amber-600' : 'text-gray-900'}">
+                  $${finalPay.toLocaleString()}
+                </span>
+              </div>
+            </div>
+
+            <!-- Sub-details -->
+            <div class="mt-2 text-xs text-gray-500 space-y-0.5">
+              ${person.isBirthday ? (
+                finalPay === 0
+                  ? `<div>祝壽星生日快樂！本次聚餐由大家共同請客 🎉</div>`
+                  : `<div>共同餐費免單，僅計算個人自付單點</div>`
+              ) : (
+                `<div class="flex justify-between">
+                  <span>共同餐費分攤 ${state.serviceRate > 0 ? `(含${state.serviceRate}%服務費)` : ''}</span>
+                  <span>$${Math.round(baseSharedPortion + sharedServicePortion).toLocaleString()}</span>
+                </div>`
+              )}
+              ${extraDetailsHtml}
+              ${treatedDetailsHtml}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Rounding Note
+      const roundingNoteEl = document.getElementById('rounding-note');
+      if (state.roundingMode !== 'exact' && result.breakdowns.length > 0) {
+        roundingNoteEl.classList.remove('hidden');
+        document.getElementById('rounded-collected-total').textContent = `$${result.roundedCollectedSum.toLocaleString()}`;
+      } else {
+        roundingNoteEl.classList.add('hidden');
+      }
+    }
+
+    // ==========================================
+    // Copy to Clipboard (LINE Friendly Format)
+    // ==========================================
+    function copySummaryToClipboard() {
+      const result = calculateBill();
+      if (result.breakdowns.length === 0) {
+        showToast('目前沒有可複製的明細', '⚠️');
+        return;
+      }
+
+      const today = new Date().toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' });
+      let lines = [];
+      lines.push(`🍽️ 【${today} 聚餐分攤明細】`);
+      lines.push(`💰 整桌總金額：${formatMoney(result.rawGrandTotal, 'exact')} (${state.serviceRate > 0 ? `含${state.serviceRate}%服務費` : '免服務費'})`);
+      lines.push(`👥 分攤人數：${result.payingCount} 人付費` + (result.freeCount > 0 ? ` / ${result.freeCount} 位壽星免單🎂` : ''));
+      lines.push(`------------------------`);
+
+      result.breakdowns.forEach(b => {
+        const { person, myExtraItems, finalPay } = b;
+        if (person.isBirthday && finalPay === 0) {
+          lines.push(`🎂 ${person.name}：$0 (壽星免單！)`);
+        } else {
+          let extraNote = '';
+          if (myExtraItems.length > 0) {
+            const names = myExtraItems.map(i => `${i.name}$${i.price}`).join('、');
+            extraNote = ` [含單點: ${names}]`;
+          }
+          lines.push(`▪️ ${person.name}：$${finalPay.toLocaleString()}${extraNote}`);
+        }
+      });
+
+      lines.push(`------------------------`);
+      lines.push(`請大家確認金額並轉帳囉 🙏`);
+
+      const text = lines.join('\n');
+
+      // Use fallback textarea + execCommand for reliable iframe/mobile copying
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-9999px';
+      document.body.appendChild(textArea);
+      textArea.select();
+
+      try {
+        document.execCommand('copy');
+        showToast('已複製明細！可直接貼到 LINE 群組', '📋');
+      } catch (err) {
+        showToast('複製失敗，請手動選取複製', '❌');
+      }
+      document.body.removeChild(textArea);
+    }
+
+    // ==========================================
+    // Modals & Toasts
+    // ==========================================
+    let toastTimeout;
+    function showToast(message, icon = '✅') {
+      const toast = document.getElementById('toast');
+      document.getElementById('toast-message').textContent = message;
+      document.getElementById('toast-icon').textContent = icon;
+
+      toast.classList.remove('opacity-0', '-translate-y-2');
+      toast.classList.add('opacity-100', 'translate-y-0');
+
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', '-translate-y-2');
+      }, 2600);
+    }
+
+    function openResetModal() {
+      const modal = document.getElementById('confirm-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeResetModal() {
+      const modal = document.getElementById('confirm-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    document.getElementById('modal-cancel').addEventListener('click', closeResetModal);
+    document.getElementById('modal-confirm').addEventListener('click', clearAllData);
+
+    // Escape HTML to prevent XSS
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // Boot with sample data on load
+    window.addEventListener('DOMContentLoaded', () => {
+      loadSampleData();
+    });
+  </script>
+</body>
+</html>
